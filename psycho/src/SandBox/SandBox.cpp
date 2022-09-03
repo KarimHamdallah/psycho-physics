@@ -63,7 +63,7 @@ void SandBox::start()
 
 	player = world->Add_Box_Body(pvec2(random(0.0f, width), random(0.0f, height)),
 		random(0.0f, 360.0f),
-		random(20.0f, 50.0f), random(20.0f, 50.0f), 1.0f, 1.0f, random(0.0f, 1.0f));
+		random(20.0f, 50.0f), random(20.0f, 50.0f), 1.0f, 1.0f, /*random(0.0f, 1.0f)*/1.0f, false);
 	
 	
 	for (size_t i = 0; i < BODIES_COUNT; i++)
@@ -75,14 +75,15 @@ void SandBox::start()
 		f32 h = random(20.0f, 50.0f);
 		f32 raduis = random(10.0f, 50.0f);
 		f32 mass = 1.0f;
-		f32 restitution = random(0.0f, 1.0f);
+		f32 restitution = /*random(0.0f, 1.0f)*/1.0f;
+		bool isStatic = (bool)random(0, 1);
 
 		if (shape == BodyShape::AABB)
-			world->Add_AABB_Body(position, w, h, mass, 1.0f, restitution);
+			world->Add_AABB_Body(position, w, h, mass, 1.0f, restitution, isStatic);
 		else if (shape == BodyShape::BOX)
-			world->Add_Box_Body(position, rotation, w, h, mass, 1.0f, restitution);
+			world->Add_Box_Body(position, rotation, w, h, mass, 1.0f, restitution, isStatic);
 		else if (shape == BodyShape::CIRCLE)
-			world->Add_Circle_Body(position, rotation, raduis, mass, 1.0f, restitution);
+			world->Add_Circle_Body(position, rotation, raduis, mass, 1.0f, restitution, isStatic);
 	}
 
 	random_body = random(0, world->Get_Body_Count() - 1);

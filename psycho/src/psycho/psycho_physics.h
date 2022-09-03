@@ -572,6 +572,7 @@ public:
 	f32 invMass;
 	AABB aabb;
 	BodyShape shape;
+	bool isStatic;
 
 	bool updateTransformations;
 	bool updateAABB;
@@ -579,7 +580,7 @@ public:
 	PhysicsBody()
 		: position(pvec2(0.0f)), rotation(0.0f), inertia(0.0f), width(0.0f), height(0.0f), raduis(0.0f), linearVelocity(pvec2(0.0f)),
 		rotationalVelocity(0.0f), force(0.0f),
-		density(0.0f), restitution(0.0f), mass(0.0f), invMass(0.0f), updateTransformations(false), updateAABB(false)
+		density(0.0f), restitution(0.0f), mass(0.0f), invMass(0.0f), updateTransformations(false), updateAABB(false), isStatic(false)
 	{}
 
 
@@ -741,7 +742,7 @@ public:
 	}
 
 
-	u32 Add_AABB_Body(const pvec2& position, u32 width, u32 height, f32 mass, f32 density, f32 restitution)
+	u32 Add_AABB_Body(const pvec2& position, u32 width, u32 height, f32 mass, f32 density, f32 restitution, bool isStatic)
 	{
 		std::shared_ptr<PhysicsBody> Body = std::make_shared<PhysicsBody>();
 		Body->position = position;
@@ -751,7 +752,7 @@ public:
 		Body->density = density;
 		Body->restitution = clampf(restitution, 0.0f, 1.0f);
 		Body->mass = mass;
-		Body->invMass = mass == 0.0f ? 0.0f : 1.0f / mass;
+		Body->invMass = !isStatic ? mass == 0.0f ? 0.0f : 1.0f / mass : 0.0f;
 
 		Body->aabb.center = position;
 		Body->aabb.half_scale = pvec2(width * 0.5f, height * 0.5f);
@@ -759,6 +760,7 @@ public:
 		Body->aabb.max = Body->aabb.center + Body->aabb.half_scale;
 
 		Body->shape = BodyShape::AABB;
+		Body->isStatic = isStatic;
 
 		Bodies.push_back(Body);
 
@@ -766,7 +768,7 @@ public:
 		return Bodies.size() - 1;
 	}
 
-	u32 Add_Box_Body(const pvec2& position, f32 rotation, u32 width, u32 height, f32 mass, f32 density, f32 restitution)
+	u32 Add_Box_Body(const pvec2& position, f32 rotation, u32 width, u32 height, f32 mass, f32 density, f32 restitution, bool isStatic)
 	{
 		std::shared_ptr<PhysicsBody> Body = std::make_shared<PhysicsBody>();
 		Body->position = position;
@@ -777,7 +779,7 @@ public:
 		Body->density = density;
 		Body->restitution = clampf(restitution, 0.0f, 1.0f);
 		Body->mass = mass;
-		Body->invMass = mass == 0.0f ? 0.0f : 1.0f / mass;
+		Body->invMass = !isStatic ? mass == 0.0f ? 0.0f : 1.0f / mass : 0.0f;
 		Body->inertia = 0.08333333333f * mass * (width * width + height * height); // inertia for rectangular plate around Z axis
 		Body->vertices = {   // vertices in local space
 			pvec2(-0.5f,  0.5f),
@@ -813,6 +815,7 @@ public:
 		Body->aabb.half_scale = Body->aabb.center - Body->aabb.min;
 
 		Body->shape = BodyShape::BOX;
+		Body->isStatic = isStatic;
 
 		Bodies.push_back(Body);
 
@@ -820,7 +823,7 @@ public:
 		return Bodies.size() - 1;
 	}
 
-	u32 Add_Circle_Body(const pvec2& position, f32 rotation, u32 raduis, f32 mass, f32 density, f32 restitution)
+	u32 Add_Circle_Body(const pvec2& position, f32 rotation, u32 raduis, f32 mass, f32 density, f32 restitution, bool isStatic)
 	{
 		std::shared_ptr<PhysicsBody> Body = std::make_shared<PhysicsBody>();
 		Body->position = position;
@@ -830,7 +833,7 @@ public:
 		Body->density = density;
 		Body->restitution = clampf(restitution, 0.0f, 1.0f);
 		Body->mass = mass;
-		Body->invMass = mass == 0.0f ? 0.0f : 1.0f / mass;
+		Body->invMass = !isStatic ? mass == 0.0f ? 0.0f : 1.0f / mass : 0.0f;
 		Body->inertia = 0.5f * mass * (raduis * raduis); // inertia for circluar disc around Z axis
 
 		Body->aabb.center = position;
@@ -839,6 +842,7 @@ public:
 		Body->aabb.max = Body->aabb.center + Body->aabb.half_scale;
 
 		Body->shape = BodyShape::CIRCLE;
+		Body->isStatic = isStatic;
 
 		Bodies.push_back(Body);
 
@@ -860,6 +864,10 @@ public:
 		for (size_t i = 0; i < Bodies.size(); i++)
 		{
 			PhysicsBody* Body = Get_Body(i);
+
+			// Skip if is static
+			if (Body->isStatic)
+				continue;
 			
 			pvec2 acceleration = Body->force * Body->invMass;
 			Body->linearVelocity += acceleration * deltaTime;
@@ -878,14 +886,23 @@ public:
 			{
 				PhysicsBody* BodyB = Get_Body(b);
 
+				if (BodyA->isStatic && BodyB->isStatic)
+					continue;
+
 				pvec2 collision_normal;
 				f32 collision_depth;
 				if (isCollided(BodyA, BodyB, collision_normal, collision_depth))
 				{
 					// rseolve collision
-					BodyA->move(collision_normal * collision_depth * -0.5f);
-					BodyB->move(collision_normal * collision_depth *  0.5f);
-
+					if(BodyA->isStatic)
+						BodyB->move(collision_normal * collision_depth);
+					else if(BodyB->isStatic)
+						BodyA->move(collision_normal * -collision_depth);
+					else
+					{
+						BodyA->move(collision_normal * collision_depth * -0.5f);
+						BodyB->move(collision_normal * collision_depth *  0.5f);
+					}
 					// impulse resolution
 					impulse_resolution(BodyA, BodyB, collision_normal);
 				}
@@ -947,11 +964,18 @@ private:
 	void impulse_resolution(PhysicsBody* BodyA, PhysicsBody* BodyB, const pvec2 collision_normal)
 	{
 		pvec2 relative_velocity = BodyB->linearVelocity - BodyA->linearVelocity;
+		f32 d = dot(relative_velocity, collision_normal);
+
+		if (d > 0.0f) // the relative velocity is in the same direction of vector normal
+			return;
+
 		f32 e = std::min(BodyA->getRestitution(), BodyB->getRestitution());
-		f32 j = -(1 + e) * dot(relative_velocity, collision_normal);
+		f32 j = -(1 + e) * d;
 		j /= (BodyA->invMass + BodyB->invMass);
 
-		BodyA->linearVelocity -= collision_normal * (j * BodyA->invMass);
-		BodyB->linearVelocity += collision_normal * (j * BodyB->invMass);
+		pvec2 impulse = collision_normal * j; // get impulse vector along the normal
+
+		BodyA->linearVelocity -= impulse * BodyA->invMass; // scale impulse vector by inverse mass
+		BodyB->linearVelocity += impulse * BodyB->invMass; // scale impulse vector by inverse mass
 	}
 };
