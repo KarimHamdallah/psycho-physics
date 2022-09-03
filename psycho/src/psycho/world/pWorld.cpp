@@ -94,7 +94,7 @@ void pWorld::worldUpdate(f32 deltaTime, pvec2 gravity, u32 iterations)
 		contactList.clear();
 		contactPointsList.clear();
 
-		// collsion dtection and resoluttion
+		// collsion detection and resoluttion
 		for (size_t i = 0; i < bodies.size(); i++)
 		{
 			pBody* BodyA = bodies[i];

@@ -103,7 +103,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>opengl32.lib;glew32.lib;SDL2.lib;SDL2main.lib;snap_engine.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>opengl32.lib;glew32.lib;SDL2.lib;SDL2main.lib;snap_engine.lib;freetype.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -116,7 +116,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>opengl32.lib;glew32.lib;SDL2.lib;SDL2main.lib;snap_engine.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>opengl32.lib;glew32.lib;SDL2.lib;SDL2main.lib;snap_engine.lib;freetype.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -133,7 +133,7 @@
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>opengl32.lib;glew32.lib;SDL2.lib;SDL2main.lib;snap_engine.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>opengl32.lib;glew32.lib;SDL2.lib;SDL2main.lib;snap_engine.lib;freetype.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -150,31 +150,15 @@
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>opengl32.lib;glew32.lib;SDL2.lib;SDL2main.lib;snap_engine.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>opengl32.lib;glew32.lib;SDL2.lib;SDL2main.lib;snap_engine.lib;freetype.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
-    <ClCompile Include="src\psycho\collisions\collisions.cpp" />
-    <ClCompile Include="src\psycho\logger\pLogger.cpp" />
-    <ClCompile Include="src\psycho\psycho.cpp" />
-    <ClCompile Include="src\psycho\world\pBody.cpp" />
-    <ClCompile Include="src\psycho\world\pWorld.cpp" />
     <ClCompile Include="src\SandBox\SandBox.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\psycho\collisions\collision manifold.h" />
-    <ClInclude Include="src\psycho\collisions\collisions.h" />
-    <ClInclude Include="src\psycho\collisions\triggers.h" />
-    <ClInclude Include="src\psycho\defines.h" />
-    <ClInclude Include="src\psycho\logger\passerts.h" />
-    <ClInclude Include="src\psycho\logger\pLogger.h" />
-    <ClInclude Include="src\psycho\math\pmath.h" />
-    <ClInclude Include="src\psycho\math\pvec2.h" />
-    <ClInclude Include="src\psycho\psycho.h" />
-    <ClInclude Include="src\psycho\world\pBody.h" />
-    <ClInclude Include="src\psycho\world\pTransform.h" />
-    <ClInclude Include="src\psycho\world\pWorld.h" />
+    <ClInclude Include="src\psycho\psycho_physics.h" />
     <ClInclude Include="src\SandBox\SandBox.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

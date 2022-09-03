@@ -1,20 +1,25 @@
 #include "SandBox.h"
 
-// TODO::REMOVE
-static glm::vec2 toVec2(const pvec2& v)
-{
-	return glm::vec2(v.x, v.y); 
-}
-static pvec2 toVec2(const glm::vec2& v)
-{
-	return pvec2(v.x, v.y);
-}
-
 #define OFF_WHITE color {0.8f,0.8f,0.8f,1.0f}
 #define OFF_RED color {0.8f,0.0f,0.0f,1.0f}
 #define OFF_GREEN color{0.0f, 0.5f, 0.0f, 1.0f}
 
+u32 random_body;
+u32 player;
+
+#define BODIES_COUNT 5
+
 color colors_array[] = { RED, GREEN, BLUE, CYAN, OFF_WHITE, OFF_RED };
+
+glm::vec2 toVec2(const pvec2& vector)
+{
+	return glm::vec2(vector.x, vector.y);
+}
+
+pvec2 toVec2(const glm::vec2& vector)
+{
+	return pvec2(vector.x, vector.y);
+}
 
 
 SandBox::SandBox()
@@ -41,85 +46,88 @@ void SandBox::init()
 
 	// init time system
 	Time::time_init(60.0f);
-
-	// init physics system
-	physicsWorld::physics_init();
-
-
-	// init psycho physics
-	psycho::psycho_init();
 }
 
 void SandBox::start()
 {
-	Input::show_cursor(true);
-	windowCenter = pvec2(win->getWidth() * 0.5f, win->getHeight() * 0.5f);
-	u32 width = win->getWidth();
-	u32 height = win->getHeight();
+	windowCenter = glm::vec2(window::getInstance()->getWidth() * 0.5f, window::getInstance()->getHeight() * 0.5f);
+	f32 width = window::getInstance()->getWidth();
+	f32 height = window::getInstance()->getHeight();
 
-	ground = pWorld::addBoxeBody(pvec2(windowCenter.x, windowCenter.y - 200.0f), 600.0f, 80.0f, 1.0f, 1.0f, true);
-	colors.push_back(OFF_GREEN);
+
+	world = std::make_shared<physicsWorld>();
+
+
+
+
+
+	player = world->Add_Box_Body(pvec2(random(0.0f, width), random(0.0f, height)),
+		random(0.0f, 360.0f),
+		random(20.0f, 50.0f), random(20.0f, 50.0f), 1.0f, 1.0f, random(0.0f, 1.0f));
+	
+	
+	for (size_t i = 0; i < BODIES_COUNT; i++)
+	{
+		BodyShape shape = static_cast<BodyShape>(random(0, 2));
+		pvec2 position = pvec2(random(0.0f, width), random(0.0f, height));
+		f32 rotation = random(0.0f, 360.0f);
+		f32 w = random(20.0f, 50.0f);
+		f32 h = random(20.0f, 50.0f);
+		f32 raduis = random(10.0f, 50.0f);
+		f32 mass = 1.0f;
+		f32 restitution = random(0.0f, 1.0f);
+
+		if (shape == BodyShape::AABB)
+			world->Add_AABB_Body(position, w, h, mass, 1.0f, restitution);
+		else if (shape == BodyShape::BOX)
+			world->Add_Box_Body(position, rotation, w, h, mass, 1.0f, restitution);
+		else if (shape == BodyShape::CIRCLE)
+			world->Add_Circle_Body(position, rotation, raduis, mass, 1.0f, restitution);
+	}
+
+	random_body = random(0, world->Get_Body_Count() - 1);
 }
 
 void SandBox::update()
 {
-	for (size_t i = 0; i < pWorld::getBodyCount(); i++)
-	{
-		pBody* b = pWorld::getBody(i);
-		if (b->position.x > win->getWidth() || b->position.x < 0 || b->position.y > win->getHeight() || b->position.y < 0)
-		{
-			pWorld::removeBody(i);
-			colors.erase(colors.begin() + i);
-		}
-	}
-	if (Input::isButtonDown(MouseButton::MouseButtonLeft))
-	{
-		pvec2 position = toVec2(Input::getMousePos());
-		f32 width = random(10.0f, 50.0f);
-		f32 height = random(10.0f, 50.0f);
-		pWorld::addBoxeBody(position, width, height, 1.0f, 0.5f, false);
-		colors.push_back(colors_array[random(0, 5)]);
-	}
-
-	if (Input::isButtonDown(MouseButton::MouseButtonRight))
-	{
-		pvec2 position = toVec2(Input::getMousePos());
-		f32 raduis = random(10.0f, 30.0f);
-		pWorld::addCircleBody(position, raduis, 1.0f, 0.5f, false);
-		colors.push_back(colors_array[random(0, 5)]);
-	}
-
-	pWorld::worldUpdate(Time::m_deltaTime, pvec2(0.0f, -150.0f));
+	world->update(Time::m_deltaTime);
 }
 
 void SandBox::render()
 {
-	for (size_t i = 0; i < pWorld::getBodyCount(); i++)
-	{
-		pBody* body = pWorld::getBody(i);
-
-		if (body->shapeType == pBodyShape::Box)
-		{
-			renderer::render_quad(toVec2(body->position), glm::vec2(body->width, body->height), colors[i]);
-		}
-		else if (body->shapeType == pBodyShape::Circle)
-		{
-			renderer::render_smoothcircle(toVec2(body->position), body->diameter, colors[i], 0.1f);
-		}
-	}
-
+	// pick random body
+	auto body = world->Get_Body(player);
+	body->setRotation(Time::m_currentTime * 0.1f);
 	
-	for (size_t i = 0; i < pWorld::contactPointsList.size(); i++)
+	f32 forceMag = 200.0f;
+	if (Input::isKeyPressed(Key::D))
+		body->addForce(pvec2(forceMag, 0.0f));
+	if (Input::isKeyPressed(Key::A))
+		body->addForce(pvec2(-forceMag, 0.0f));
+	if (Input::isKeyPressed(Key::W))
+		body->addForce(pvec2(0.0f, forceMag));
+	if (Input::isKeyPressed(Key::S))
+		body->addForce(pvec2(0.0f, -forceMag));
+
+	for (size_t i = 0; i < world->Get_Body_Count(); i++)
 	{
-		renderer::render_quad(toVec2(pWorld::contactPointsList[i]), glm::vec2(5.0f), WHITE);
+		auto Body = world->Get_Body(i);
+		if (Body->getShape() == BodyShape::AABB)
+			renderer::render_aabb(_AABB{ toVec2(Body->getAABB().center), toVec2(Body->getAABB().half_scale) }, RED);
+		else if (Body->getShape() == BodyShape::BOX)
+		{
+			renderer::render_quad(toVec2(Body->getPos()), glm::vec2(Body->getWidth(), Body->getHeight()), Body->getRotation(), GREEN);
+			renderer::render_aabb(_AABB{ toVec2(Body->getAABB().center), toVec2(Body->getAABB().half_scale) }, color{1.0f, 1.0f, 1.0f, 0.5f});
+		}
+		else
+		{
+			renderer::render_smoothcircle(toVec2(Body->getPos()), Body->getRaduis() * 2.0f, BLUE, 0.1f);
+		}
 	}
 }
 
 void SandBox::shutdown()
 {
-	// free phsyics memory
-	physicsWorld::free_memory();
-	pWorld::free_memory();
 }
 
 SandBox::~SandBox()
@@ -140,6 +148,6 @@ void SandBox::run()
 		renderer::renderer_begin();
 		render();
 		renderer::renderer_end(win->getRenderingWindow());
-		//Time::time_update_late();
+		Time::time_update_late();
 	}
 }

@@ -21,60 +21,12 @@
     <ClCompile Include="src\SandBox\SandBox.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\psycho\logger\pLogger.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\psycho\world\pBody.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\psycho\collisions\collisions.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\psycho\psycho.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\psycho\world\pWorld.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\SandBox\SandBox.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\psycho\math\pvec2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\psycho\defines.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\psycho\math\pmath.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\psycho\logger\passerts.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\psycho\logger\pLogger.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\psycho\psycho.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\psycho\world\pBody.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\psycho\world\pWorld.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\psycho\collisions\collisions.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\psycho\world\pTransform.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\psycho\collisions\triggers.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\psycho\collisions\collision manifold.h">
+    <ClInclude Include="src\psycho\psycho_physics.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

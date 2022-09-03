@@ -1,6 +1,6 @@
 #pragma once
 #include <snap_engine.h>
-#include <psycho/psycho.h>
+#include "psycho/psycho_physics.h"
 
 class SandBox
 {
@@ -20,10 +20,9 @@ private:
 	std::shared_ptr<window> win;
 
 	// helper variables
-	pvec2 windowCenter;
+	glm::vec2 windowCenter;
 
 	// psycho
-	std::vector<color> colors;
-	u32 ground;
-	u32 cursorBody;
+	std::vector<u32> bodies;
+	std::shared_ptr<physicsWorld> world;
 };
