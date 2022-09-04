@@ -733,7 +733,7 @@ public:
 class physicsWorld
 {
 public:
-	physicsWorld() { drag = 0.99f; }
+	physicsWorld() { drag = 0.99f; gravity = pvec2(0.0f, -100.0f); }
 	// TODO:: DESTRUCTOR
 	~physicsWorld()
 	{
@@ -858,56 +858,64 @@ public:
 	u32 Get_Body_Count() { return Bodies.size(); }
 	void Set_Gravity(pvec2 gravity_vector) { gravity = gravity_vector; }
 
-	void update(f32 deltaTime)
+	void update(f32 deltaTime, u32 iterations = 1)
 	{
+		deltaTime /= (f32)iterations;
 
-		for (size_t i = 0; i < Bodies.size(); i++)
+		while (iterations > 0)
 		{
-			PhysicsBody* Body = Get_Body(i);
 
-			// Skip if is static
-			if (Body->isStatic)
-				continue;
-			
-			pvec2 acceleration = Body->force * Body->invMass;
-			Body->linearVelocity += acceleration * deltaTime;
-			Body->move(Body->linearVelocity * deltaTime);
 
-			Body->rotate(Body->rotationalVelocity * deltaTime);
-			
-			Body->linearVelocity *= drag;
-			Body->force = pvec2(0.0f);
-		}
-
-		for (size_t a = 0; a < Bodies.size(); a++)
-		{
-			PhysicsBody* BodyA = Get_Body(a);
-			for (size_t b = a + 1; b < Bodies.size(); b++)
+			for (size_t i = 0; i < Bodies.size(); i++)
 			{
-				PhysicsBody* BodyB = Get_Body(b);
+				PhysicsBody* Body = Get_Body(i);
 
-				if (BodyA->isStatic && BodyB->isStatic)
+				// Skip if is static
+				if (Body->isStatic)
 					continue;
 
-				pvec2 collision_normal;
-				f32 collision_depth;
-				if (isCollided(BodyA, BodyB, collision_normal, collision_depth))
+				//pvec2 acceleration = Body->force * Body->invMass;
+				//Body->linearVelocity += acceleration * deltaTime;
+				Body->linearVelocity += gravity * deltaTime;
+				Body->move(Body->linearVelocity * deltaTime);
+
+				Body->rotate(Body->rotationalVelocity * deltaTime);
+
+				//Body->linearVelocity *= drag;
+				//Body->force = pvec2(0.0f);
+			}
+
+			for (size_t a = 0; a < Bodies.size(); a++)
+			{
+				PhysicsBody* BodyA = Get_Body(a);
+				for (size_t b = a + 1; b < Bodies.size(); b++)
 				{
-					// rseolve collision
-					if(BodyA->isStatic)
-						BodyB->move(collision_normal * collision_depth);
-					else if(BodyB->isStatic)
-						BodyA->move(collision_normal * -collision_depth);
-					else
+					PhysicsBody* BodyB = Get_Body(b);
+
+					if (BodyA->isStatic && BodyB->isStatic)
+						continue;
+
+					pvec2 collision_normal;
+					f32 collision_depth;
+					if (isCollided(BodyA, BodyB, collision_normal, collision_depth))
 					{
-						BodyA->move(collision_normal * collision_depth * -0.5f);
-						BodyB->move(collision_normal * collision_depth *  0.5f);
+						// rseolve collision
+						if (BodyA->isStatic)
+							BodyB->move(collision_normal * collision_depth);
+						else if (BodyB->isStatic)
+							BodyA->move(collision_normal * -collision_depth);
+						else
+						{
+							BodyA->move(collision_normal * collision_depth * -0.5f);
+							BodyB->move(collision_normal * collision_depth *  0.5f);
+						}
+						// impulse resolution
+						impulse_resolution(BodyA, BodyB, collision_normal);
 					}
-					// impulse resolution
-					impulse_resolution(BodyA, BodyB, collision_normal);
-				}
-			} // b
-		} // a
+				} // b
+			} // a
+			iterations--;
+		} // iterations
 	}
 
 private:

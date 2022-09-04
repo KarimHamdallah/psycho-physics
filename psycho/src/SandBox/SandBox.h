@@ -20,9 +20,9 @@ private:
 	std::shared_ptr<window> win;
 
 	// helper variables
-	glm::vec2 windowCenter;
+	pvec2 windowCenter;
 
 	// psycho
-	std::vector<u32> bodies;
+	std::vector<color> colors;
 	std::shared_ptr<physicsWorld> world;
 };

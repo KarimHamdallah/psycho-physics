@@ -4,8 +4,7 @@
 #define OFF_RED color {0.8f,0.0f,0.0f,1.0f}
 #define OFF_GREEN color{0.0f, 0.5f, 0.0f, 1.0f}
 
-u32 random_body;
-u32 player;
+u32 ground;
 
 #define BODIES_COUNT 5
 
@@ -50,56 +49,59 @@ void SandBox::init()
 
 void SandBox::start()
 {
-	windowCenter = glm::vec2(window::getInstance()->getWidth() * 0.5f, window::getInstance()->getHeight() * 0.5f);
+	windowCenter = pvec2(window::getInstance()->getWidth() * 0.5f, window::getInstance()->getHeight() * 0.5f);
+
 	f32 width = window::getInstance()->getWidth();
 	f32 height = window::getInstance()->getHeight();
 
-
 	world = std::make_shared<physicsWorld>();
 
-
-
-
-
-	player = world->Add_Box_Body(pvec2(random(0.0f, width), random(0.0f, height)),
-		random(0.0f, 360.0f),
-		random(20.0f, 50.0f), random(20.0f, 50.0f), 1.0f, 1.0f, /*random(0.0f, 1.0f)*/1.0f, false);
+	ground = world->Add_Box_Body(windowCenter - pvec2(0.0f, 200.0f),
+		0.0f,
+		500.0f, 80.0f, 1.0f, 1.0f, 1.0f, true);
 	
-	
-	for (size_t i = 0; i < BODIES_COUNT; i++)
-	{
-		BodyShape shape = static_cast<BodyShape>(random(0, 2));
-		pvec2 position = pvec2(random(0.0f, width), random(0.0f, height));
-		f32 rotation = random(0.0f, 360.0f);
-		f32 w = random(20.0f, 50.0f);
-		f32 h = random(20.0f, 50.0f);
-		f32 raduis = random(10.0f, 50.0f);
-		f32 mass = 1.0f;
-		f32 restitution = /*random(0.0f, 1.0f)*/1.0f;
-		bool isStatic = (bool)random(0, 1);
-
-		if (shape == BodyShape::AABB)
-			world->Add_AABB_Body(position, w, h, mass, 1.0f, restitution, isStatic);
-		else if (shape == BodyShape::BOX)
-			world->Add_Box_Body(position, rotation, w, h, mass, 1.0f, restitution, isStatic);
-		else if (shape == BodyShape::CIRCLE)
-			world->Add_Circle_Body(position, rotation, raduis, mass, 1.0f, restitution, isStatic);
-	}
-
-	random_body = random(0, world->Get_Body_Count() - 1);
+	colors.push_back(OFF_GREEN);
 }
 
 void SandBox::update()
 {
+	if (Input::isButtonDown(MouseButton::MouseButtonRight))
+	{
+		pvec2 position = toVec2(Input::getMousePos());
+		f32 rotation = 0.0f;
+		f32 w = random(20.0f, 50.0f);
+		f32 h = random(20.0f, 50.0f);
+		f32 raduis = random(10.0f, 50.0f);
+		f32 mass = 1.0f;
+		f32 restitution = random(0.1f, 0.9f);
+		bool isStatic = false;
+
+		world->Add_Circle_Body(position, rotation, raduis, mass, 1.0f, restitution, isStatic);
+		colors.push_back(colors_array[random(0, 5)]);
+	}
+
+	if (Input::isButtonDown(MouseButton::MouseButtonLeft))
+	{
+		pvec2 position = toVec2(Input::getMousePos());
+		f32 rotation = 0.0f;
+		f32 w = random(20.0f, 50.0f);
+		f32 h = random(20.0f, 50.0f);
+		f32 raduis = random(10.0f, 50.0f);
+		f32 mass = 1.0f;
+		f32 restitution = random(0.1f, 0.9f);
+		bool isStatic = false;
+
+		world->Add_AABB_Body(position, w, h, mass, 1.0f, restitution, isStatic);
+		colors.push_back(colors_array[random(0, 5)]);
+	}
+
+
 	world->update(Time::m_deltaTime);
 }
 
 void SandBox::render()
 {
-	// pick random body
-	auto body = world->Get_Body(player);
-	body->setRotation(Time::m_currentTime * 0.1f);
-	
+	/*
 	f32 forceMag = 200.0f;
 	if (Input::isKeyPressed(Key::D))
 		body->addForce(pvec2(forceMag, 0.0f));
@@ -109,20 +111,21 @@ void SandBox::render()
 		body->addForce(pvec2(0.0f, forceMag));
 	if (Input::isKeyPressed(Key::S))
 		body->addForce(pvec2(0.0f, -forceMag));
+	*/
 
 	for (size_t i = 0; i < world->Get_Body_Count(); i++)
 	{
-		auto Body = world->Get_Body(i);
+		PhysicsBody* Body = world->Get_Body(i);
 		if (Body->getShape() == BodyShape::AABB)
-			renderer::render_aabb(_AABB{ toVec2(Body->getAABB().center), toVec2(Body->getAABB().half_scale) }, RED);
+			renderer::render_aabb(_AABB{ toVec2(Body->getAABB().center), toVec2(Body->getAABB().half_scale) }, colors[i]);
 		else if (Body->getShape() == BodyShape::BOX)
 		{
-			renderer::render_quad(toVec2(Body->getPos()), glm::vec2(Body->getWidth(), Body->getHeight()), Body->getRotation(), GREEN);
-			renderer::render_aabb(_AABB{ toVec2(Body->getAABB().center), toVec2(Body->getAABB().half_scale) }, color{1.0f, 1.0f, 1.0f, 0.5f});
+			renderer::render_quad(toVec2(Body->getPos()), glm::vec2(Body->getWidth(), Body->getHeight()), Body->getRotation(), colors[i]);
+			//renderer::render_aabb(_AABB{ toVec2(Body->getAABB().center), toVec2(Body->getAABB().half_scale) }, color{1.0f, 1.0f, 1.0f, 0.5f});
 		}
 		else
 		{
-			renderer::render_smoothcircle(toVec2(Body->getPos()), Body->getRaduis() * 2.0f, BLUE, 0.1f);
+			renderer::render_smoothcircle(toVec2(Body->getPos()), Body->getRaduis() * 2.0f, colors[i], 0.1f);
 		}
 	}
 }
