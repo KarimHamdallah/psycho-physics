@@ -1,4 +1,4 @@
-#pragma once
+#pragma once      // AABB vs Circle Bug
 #include <vector>
 #include <memory>
 #include <string>
@@ -109,6 +109,16 @@ inline u32 clamp(u32 value, u32 min, u32 max)
 	return std::max(min, std::min(max, value));
 }
 
+inline bool nearly_equal(f32 a, f32 b, f32 amount)
+{
+	return fabs(a - b) < amount;
+}
+
+inline bool nearly_equal(const pvec2& a, const pvec2& b, f32 amount)
+{
+	return nearly_equal(a.x, b.x, amount) && nearly_equal(a.y, b.y, amount);
+}
+
 inline pvec2 transform_vector(const pvec2& vector_to_transform, const pvec2& translation, const pvec2& scale, f32 rotation)
 {
 	pvec2 vector = vector_to_transform;
@@ -139,7 +149,31 @@ inline std::vector<pvec2> Transform_vertices(const std::vector<pvec2>& vertices,
 		result.push_back(transform_vector(vertices[i], translation, scale, rotation));
 	return result;
 }
+////////////////////////////////////////////// algorithms //////////////////////////////////////////////
+class Algorithms
+{
+public:
 
+	static void getClosestPointToLine(const pvec2& point, const pvec2& lineStart, const pvec2& lineEnd, pvec2& ClosestPoint, f32& distanceSqrd)
+	{
+		pvec2 ab = lineEnd - lineStart;
+		pvec2 ap = point - lineStart;
+
+		f32 proj = dot(ap, ab);
+
+		// normalize projection
+		f32 d = proj / length_sqrd(ab);
+
+		if (d <= 0.0f)
+			ClosestPoint = lineStart;
+		else if (d >= 1.0f)
+			ClosestPoint = lineEnd;
+		else
+			ClosestPoint = lineStart + ab * d;
+
+		distanceSqrd = distance_sqrd(point, ClosestPoint);
+	}
+};
 ////////////////////////////////////////////// collisions //////////////////////////////////////////////
 struct AABB
 {
@@ -542,6 +576,113 @@ private:
 	}
 };
 
+////////////////////////////////////////////// Contact Points ////////////////////////////////////////////////////
+class ContactPoints
+{
+public:
+	static void Circle_vs_Circle(const pvec2& centerA, f32 raduisA, const pvec2& centerB, pvec2& contactPoint)
+	{
+		// dist vector in A >> B direction
+		pvec2 distance_vector = centerB - centerA;
+		contactPoint = centerA + normalize(distance_vector) * raduisA;
+	}
+
+	static void Circle_vs_Polygon(pvec2* vertices, u32 vertices_count, const pvec2& center, f32 raduis, pvec2& contactPoint)
+	{
+		contactPoint = pvec2(0.0f);
+		f32 min_dist = FLT_MAX;
+
+		for (size_t i = 0; i < vertices_count; i++)
+		{
+			pvec2 a = vertices[i];
+			pvec2 b = vertices[(i + 1) % vertices_count];
+
+			pvec2 ClosestPoint;
+			f32 dist_sqrd;
+
+			Algorithms::getClosestPointToLine(center, a, b, ClosestPoint, dist_sqrd);
+
+			if (dist_sqrd < min_dist)
+			{
+				min_dist = dist_sqrd;
+				contactPoint = ClosestPoint;
+			}
+		}
+	}
+
+	static void Polygon_vs_Polygon(pvec2* verticesA, u32 vertices_countA, pvec2* verticesB, u32 vertices_countB, pvec2& contactPoint1, pvec2& contactPoint2, f32& ContactCount)
+	{
+		contactPoint1 = pvec2(0.0f);
+		contactPoint2 = pvec2(0.0f);
+		f32 min_dist = FLT_MAX;
+
+		for (size_t a = 0; a < vertices_countA; a++)
+		{
+			// get each point in vertices A and get closest point to each edge of polygon B
+			pvec2 point = verticesA[a];
+			for (size_t b = 0; b < vertices_countB; b++)
+			{
+				pvec2 start = verticesB[b];
+				pvec2 end = verticesB[(b + 1) % vertices_countB];
+
+				pvec2 contact;
+				f32 dist;
+				Algorithms::getClosestPointToLine(point, start, end, contact, dist);
+
+				// there is another point
+				f32 diff_pixels = 3.0f;
+				if (nearly_equal(dist, min_dist, diff_pixels))
+				{
+					if (!nearly_equal(contact, contactPoint1, diff_pixels))
+					{
+						contactPoint2 = contact;
+						ContactCount = 2;
+					}
+				}
+				else if (dist < min_dist)
+				{
+					min_dist = dist;
+					contactPoint1 = contact;
+					ContactCount = 1;
+				}
+			}// b
+		}// a
+
+		for (size_t b = 0; b < vertices_countB; b++)
+		{
+			// get each point in vertices B and get closest point to each edge of polygon A
+			pvec2 point = verticesB[b];
+			for (size_t a = 0; a < vertices_countA; a++)
+			{
+				pvec2 start = verticesA[a];
+				pvec2 end = verticesA[(a + 1) % vertices_countA];
+
+				pvec2 contact;
+				f32 dist;
+				Algorithms::getClosestPointToLine(point, start, end, contact, dist);
+
+				// there is another point
+				f32 diff_pixels = 3.0f;
+				if (nearly_equal(dist, min_dist, diff_pixels))
+				{
+					if (!nearly_equal(contact, contactPoint1, diff_pixels))
+					{
+						contactPoint2 = contact;
+						ContactCount = 2;
+					}
+				}
+				else if (dist < min_dist)
+				{
+					min_dist = dist;
+					contactPoint1 = contact;
+					ContactCount = 1;
+				}
+			}// a
+		}// b
+	}
+};
+
+
 ////////////////////////////////////////////// Body ////////////////////////////////////////////////////
 enum class BodyShape
 {
@@ -726,6 +867,18 @@ public:
 	}
 };
 
+///////////////////////////////////////// collision manifold /////////////////////////////////////////
+struct CollisionManifold
+{
+	PhysicsBody* BodyA;
+	PhysicsBody* BodyB;
+	pvec2 collision_normal;
+	f32 collision_depth;
+	pvec2 ContactPoint1;
+	pvec2 ContactPoint2;
+	u32 ContactPointCount;
+};
+
 
 
 ///////////////////////////////////////// world /////////////////////////////////////////
@@ -737,8 +890,7 @@ public:
 	// TODO:: DESTRUCTOR
 	~physicsWorld()
 	{
-		for (size_t i = 0; i < Bodies.size(); i++)
-			Bodies[i].reset();
+		Bodies.clear();
 	}
 
 
@@ -857,6 +1009,8 @@ public:
 	PhysicsBody* Get_Body(u32 index) { return Bodies[index].get(); }
 	u32 Get_Body_Count() { return Bodies.size(); }
 	void Set_Gravity(pvec2 gravity_vector) { gravity = gravity_vector; }
+	u32 Get_ContactPoints_Count() { return Contactpoints.size(); }
+	pvec2 Get_ContactPoint(u32 index) { return Contactpoints[index]; }
 
 	void update(f32 deltaTime, u32 iterations = 1)
 	{
@@ -864,6 +1018,11 @@ public:
 
 		while (iterations > 0)
 		{
+			// clear Manifolds vector
+			Manifolds.clear();
+			// clear ContactPoints vector
+			// TODO:: Remove
+			Contactpoints.clear();
 
 
 			for (size_t i = 0; i < Bodies.size(); i++)
@@ -909,22 +1068,49 @@ public:
 							BodyA->move(collision_normal * collision_depth * -0.5f);
 							BodyB->move(collision_normal * collision_depth *  0.5f);
 						}
-						// impulse resolution
-						impulse_resolution(BodyA, BodyB, collision_normal);
+
+						// store collision manifold information
+						std::shared_ptr<CollisionManifold> manifold = std::make_shared<CollisionManifold>();
+						manifold->BodyA = BodyA;
+						manifold->BodyB = BodyB;
+						manifold->collision_normal = collision_normal;
+						manifold->collision_depth = collision_depth;
+						// TODO:: add contact points
+						Calculate_ContactPoints(manifold.get());
+						Manifolds.push_back(manifold);
 					}
 				} // b
 			} // a
+
+			// resolve collision
+			for (size_t c = 0; c < Manifolds.size(); c++)
+			{
+				CollisionManifold* manifold = Manifolds[c].get();
+				// impulse resolution
+				impulse_resolution(manifold->BodyA, manifold->BodyB, manifold->collision_normal);
+			}
 			iterations--;
 		} // iterations
 	}
 
 private:
 	std::vector<std::shared_ptr<PhysicsBody>> Bodies;
+	std::vector<std::shared_ptr<CollisionManifold>> Manifolds;
+	std::vector<pvec2> Contactpoints;
 	pvec2 gravity;
 	f32 drag;
 
 	bool isCollided(PhysicsBody* BodyA, PhysicsBody* BodyB, pvec2& collison_normal, f32& collision_depth)
 	{
+		// check AABBs intersection firstly
+		if (collisions::AABB_vs_AABB(BodyA->getAABB(), BodyB->getAABB(), collison_normal, collision_depth))
+		{
+			if (BodyA->shape == BodyShape::AABB && BodyB->shape == BodyShape::AABB)
+				return true;
+		}
+		else
+			return false;
+
 		bool is_collided = false;
 
 		if (BodyA->shape == BodyShape::AABB)
@@ -985,5 +1171,213 @@ private:
 
 		BodyA->linearVelocity -= impulse * BodyA->invMass; // scale impulse vector by inverse mass
 		BodyB->linearVelocity += impulse * BodyB->invMass; // scale impulse vector by inverse mass
+	}
+
+
+	void Calculate_ContactPoints(CollisionManifold* manifold)
+	{
+		if (manifold->BodyA->shape == BodyShape::CIRCLE)
+		{
+			if (manifold->BodyB->shape == BodyShape::CIRCLE)
+			{
+				pvec2 ContactPoint;
+				ContactPoints::Circle_vs_Circle(manifold->BodyA->position, manifold->BodyA->raduis, manifold->BodyB->position, ContactPoint);
+				manifold->ContactPoint1 = ContactPoint;
+				manifold->ContactPoint2 = pvec2(0.0f);
+				manifold->ContactPointCount = 1;
+
+				// TODO:: Remove
+				Contactpoints.push_back(ContactPoint);
+			}
+			else if (manifold->BodyB->shape == BodyShape::BOX)
+			{
+				pvec2 ContactPoint;
+				ContactPoints::Circle_vs_Polygon(&manifold->BodyB->getTransformedVertices()[0], 4, manifold->BodyA->position, manifold->BodyA->raduis, ContactPoint);
+				manifold->ContactPoint1 = ContactPoint;
+				manifold->ContactPoint2 = pvec2(0.0f);
+				manifold->ContactPointCount = 1;
+
+				// TODO:: Remove
+				Contactpoints.push_back(ContactPoint);
+			}
+			else if (manifold->BodyB->shape == BodyShape::AABB)
+			{
+				AABB aabb = manifold->BodyB->getAABB();
+				
+				std::vector<pvec2> verticesB =
+				{
+					pvec2(aabb.center.x - aabb.half_scale.x, aabb.center.y + aabb.half_scale.y),
+					pvec2(aabb.center.x + aabb.half_scale.x, aabb.center.y + aabb.half_scale.y),
+					pvec2(aabb.center.x + aabb.half_scale.x, aabb.center.y - aabb.half_scale.y),
+					pvec2(aabb.center.x - aabb.half_scale.x, aabb.center.y - aabb.half_scale.y)
+				};
+
+				pvec2 ContactPoint;
+				ContactPoints::Circle_vs_Polygon(&verticesB[0], verticesB.size(), manifold->BodyA->position, manifold->BodyA->raduis, ContactPoint);
+				manifold->ContactPoint1 = ContactPoint;
+				manifold->ContactPoint2 = pvec2(0.0f);
+				manifold->ContactPointCount = 1;
+
+				// TODO:: Remove
+				Contactpoints.push_back(ContactPoint);
+			}// AABB
+		}// Circle
+		else if (manifold->BodyA->shape == BodyShape::BOX)
+		{
+			if (manifold->BodyB->shape == BodyShape::CIRCLE)
+			{
+				pvec2 ContactPoint;
+				ContactPoints::Circle_vs_Polygon(&manifold->BodyA->getTransformedVertices()[0], 4, manifold->BodyB->position, manifold->BodyB->raduis, ContactPoint);
+				manifold->ContactPoint1 = ContactPoint;
+				manifold->ContactPoint2 = pvec2(0.0f);
+				manifold->ContactPointCount = 1;
+
+				// TODO:: Remove
+				Contactpoints.push_back(ContactPoint);
+			}
+			else if (manifold->BodyB->shape == BodyShape::BOX)
+			{
+				pvec2 ContactPoint1;
+				pvec2 ContactPoint2;
+				f32 ContactPointCount;
+				ContactPoints::Polygon_vs_Polygon(&manifold->BodyA->getTransformedVertices()[0], 4, &manifold->BodyB->getTransformedVertices()[0], 4, ContactPoint1, ContactPoint2, ContactPointCount);
+				manifold->ContactPoint1 = ContactPoint1;
+				manifold->ContactPoint2 = ContactPoint2;
+				manifold->ContactPointCount = ContactPointCount;
+
+				// TODO:: Remove
+				if(ContactPointCount == 1)
+					Contactpoints.push_back(ContactPoint1);
+				else if (ContactPointCount > 1)
+				{
+					Contactpoints.push_back(ContactPoint1);
+					Contactpoints.push_back(ContactPoint2);
+				}
+			}
+			else if (manifold->BodyB->shape == BodyShape::AABB)
+			{
+				pvec2 ContactPoint1;
+				pvec2 ContactPoint2;
+				f32 ContactPointCount;
+
+				AABB aabb = manifold->BodyB->getAABB();
+
+				std::vector<pvec2> verticesB =
+				{
+					pvec2(aabb.center.x - aabb.half_scale.x, aabb.center.y + aabb.half_scale.y),
+					pvec2(aabb.center.x + aabb.half_scale.x, aabb.center.y + aabb.half_scale.y),
+					pvec2(aabb.center.x + aabb.half_scale.x, aabb.center.y - aabb.half_scale.y),
+					pvec2(aabb.center.x - aabb.half_scale.x, aabb.center.y - aabb.half_scale.y)
+				};
+
+				ContactPoints::Polygon_vs_Polygon(&manifold->BodyA->getTransformedVertices()[0], 4, &verticesB[0], verticesB.size(), ContactPoint1, ContactPoint2, ContactPointCount);
+				manifold->ContactPoint1 = ContactPoint1;
+				manifold->ContactPoint2 = ContactPoint2;
+				manifold->ContactPointCount = ContactPointCount;
+
+				// TODO:: Remove
+				if (ContactPointCount == 1)
+					Contactpoints.push_back(ContactPoint1);
+				else if (ContactPointCount > 1)
+				{
+					Contactpoints.push_back(ContactPoint1);
+					Contactpoints.push_back(ContactPoint2);
+				}
+			} // AABB
+		} // BOX
+		else if (manifold->BodyA->shape == BodyShape::AABB)
+		{
+			if (manifold->BodyB->shape == BodyShape::CIRCLE)
+			{
+				pvec2 ContactPoint;
+
+				AABB aabbA = manifold->BodyA->getAABB();
+
+				std::vector<pvec2> verticesA =
+				{
+					pvec2(aabbA.center.x - aabbA.half_scale.x, aabbA.center.y + aabbA.half_scale.y),
+					pvec2(aabbA.center.x + aabbA.half_scale.x, aabbA.center.y + aabbA.half_scale.y),
+					pvec2(aabbA.center.x + aabbA.half_scale.x, aabbA.center.y - aabbA.half_scale.y),
+					pvec2(aabbA.center.x - aabbA.half_scale.x, aabbA.center.y - aabbA.half_scale.y)
+				};
+
+				ContactPoints::Circle_vs_Polygon(&verticesA[0], verticesA.size(), manifold->BodyB->position, manifold->BodyB->raduis, ContactPoint);
+				manifold->ContactPoint1 = ContactPoint;
+				manifold->ContactPoint2 = pvec2(0.0f);
+				manifold->ContactPointCount = 1;
+
+				// TODO:: Remove
+				Contactpoints.push_back(ContactPoint);
+			}// Circle
+			else if (manifold->BodyB->shape == BodyShape::BOX)
+			{
+				pvec2 ContactPoint1;
+				pvec2 ContactPoint2;
+				f32 ContactPointCount;
+
+				AABB aabbA = manifold->BodyA->getAABB();
+
+				std::vector<pvec2> verticesA =
+				{
+					pvec2(aabbA.center.x - aabbA.half_scale.x, aabbA.center.y + aabbA.half_scale.y),
+					pvec2(aabbA.center.x + aabbA.half_scale.x, aabbA.center.y + aabbA.half_scale.y),
+					pvec2(aabbA.center.x + aabbA.half_scale.x, aabbA.center.y - aabbA.half_scale.y),
+					pvec2(aabbA.center.x - aabbA.half_scale.x, aabbA.center.y - aabbA.half_scale.y)
+				};
+
+				ContactPoints::Polygon_vs_Polygon(&verticesA[0], verticesA.size(), &manifold->BodyB->getTransformedVertices()[0], 4, ContactPoint1, ContactPoint2, ContactPointCount);
+				manifold->ContactPoint1 = ContactPoint1;
+				manifold->ContactPoint2 = ContactPoint2;
+				manifold->ContactPointCount = ContactPointCount;
+
+				// TODO:: Remove
+				if (ContactPointCount == 1)
+					Contactpoints.push_back(ContactPoint1);
+				else if (ContactPointCount > 1)
+				{
+					Contactpoints.push_back(ContactPoint1);
+					Contactpoints.push_back(ContactPoint2);
+				}
+			}// BOX
+			else if (manifold->BodyB->shape == BodyShape::AABB)
+			{
+				pvec2 ContactPoint1;
+				pvec2 ContactPoint2;
+				f32 ContactPointCount;
+
+				AABB aabbA = manifold->BodyA->getAABB();
+				AABB aabbB = manifold->BodyB->getAABB();
+
+				std::vector<pvec2> verticesA =
+				{
+					pvec2(aabbA.center.x - aabbA.half_scale.x, aabbA.center.y + aabbA.half_scale.y),
+					pvec2(aabbA.center.x + aabbA.half_scale.x, aabbA.center.y + aabbA.half_scale.y),
+					pvec2(aabbA.center.x + aabbA.half_scale.x, aabbA.center.y - aabbA.half_scale.y),
+					pvec2(aabbA.center.x - aabbA.half_scale.x, aabbA.center.y - aabbA.half_scale.y)
+				};
+
+				std::vector<pvec2> verticesB =
+				{
+					pvec2(aabbB.center.x - aabbB.half_scale.x, aabbB.center.y + aabbB.half_scale.y),
+					pvec2(aabbB.center.x + aabbB.half_scale.x, aabbB.center.y + aabbB.half_scale.y),
+					pvec2(aabbB.center.x + aabbB.half_scale.x, aabbB.center.y - aabbB.half_scale.y),
+					pvec2(aabbB.center.x - aabbB.half_scale.x, aabbB.center.y - aabbB.half_scale.y)
+				};
+
+				ContactPoints::Polygon_vs_Polygon(&verticesA[0], verticesA.size(), &verticesB[0], verticesB.size(), ContactPoint1, ContactPoint2, ContactPointCount);
+				manifold->ContactPoint1 = ContactPoint1;
+				manifold->ContactPoint2 = ContactPoint2;
+				manifold->ContactPointCount = ContactPointCount;
+
+				// TODO:: Remove
+				if (ContactPointCount == 1)
+					Contactpoints.push_back(ContactPoint1);
+				else if (ContactPointCount > 1)
+				{
+					Contactpoints.push_back(ContactPoint1);
+					Contactpoints.push_back(ContactPoint2);
+				}
+			} // AABB
+		} // AABB
 	}
 };

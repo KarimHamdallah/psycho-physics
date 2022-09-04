@@ -91,12 +91,17 @@ void SandBox::update()
 		f32 restitution = random(0.1f, 0.9f);
 		bool isStatic = false;
 
-		world->Add_AABB_Body(position, w, h, mass, 1.0f, restitution, isStatic);
+		world->Add_Box_Body(position, 0.0f, w, h, mass, 1.0f, restitution, isStatic);
 		colors.push_back(colors_array[random(0, 5)]);
 	}
 
 
 	world->update(Time::m_deltaTime);
+	if (Input::isKeyDown(Key::Enter))
+	{
+		LOG_DEBUG("body count = {}", world->Get_Body_Count());
+		LOG_INFO("frame rate = {}", Time::m_frameRate);
+	}
 }
 
 void SandBox::render()
@@ -127,6 +132,12 @@ void SandBox::render()
 		{
 			renderer::render_smoothcircle(toVec2(Body->getPos()), Body->getRaduis() * 2.0f, colors[i], 0.1f);
 		}
+	}
+
+	for (size_t i = 0; i < world->Get_ContactPoints_Count(); i++)
+	{
+		pvec2 ContactPoint = world->Get_ContactPoint(i);
+		renderer::render_quad(toVec2(ContactPoint), glm::vec2(5.0f), WHITE);
 	}
 }
 
