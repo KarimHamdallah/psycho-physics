@@ -158,6 +158,7 @@
     <ClCompile Include="src\SandBox\SandBox.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\physac.h" />
     <ClInclude Include="src\psycho\psycho_physics.h" />
     <ClInclude Include="src\SandBox\SandBox.h" />
   </ItemGroup>

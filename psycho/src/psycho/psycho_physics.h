@@ -9,6 +9,18 @@ typedef unsigned int u32;
 
 static std::string ErrorCollector;
 
+struct ContactPair
+{
+	u32 BodyA_Index;
+	u32 BodyB_Index;
+
+	ContactPair(u32 a, u32 b)
+	{
+		BodyA_Index = a;
+		BodyB_Index = b;
+	}
+};
+
 /////////////////////////////////////////////// math /////////////////////////////////////////////////
 #define PI 3.14159265359
 #define TO_RAD(degree) degree * 0.01745329251
@@ -116,7 +128,7 @@ inline bool nearly_equal(f32 a, f32 b, f32 amount)
 
 inline bool nearly_equal(const pvec2& a, const pvec2& b, f32 amount)
 {
-	return nearly_equal(a.x, b.x, amount) && nearly_equal(a.y, b.y, amount);
+	return distance_sqrd(a, b) < amount * amount;
 }
 
 inline pvec2 transform_vector(const pvec2& vector_to_transform, const pvec2& translation, const pvec2& scale, f32 rotation)
@@ -186,6 +198,16 @@ struct AABB
 class collisions
 {
 public:
+	// AABB vs AABB
+	static bool AABB_vs_AABB(const AABB& a, const AABB& b)
+	{
+		return !(a.max.x < b.min.x ||
+			     a.min.x > b.max.x ||
+			     a.max.y < b.min.y ||
+			     a.min.y > b.max.y);
+	}
+
+
 	// AABB vs AABB
 	// normal vector is in (a -> b) direction, to resolve subtract from (a) center or add to (b) center
 	static bool AABB_vs_AABB(const AABB& a, const AABB& b, pvec2& normal, f32& depth)
@@ -1009,8 +1031,6 @@ public:
 	PhysicsBody* Get_Body(u32 index) { return Bodies[index].get(); }
 	u32 Get_Body_Count() { return Bodies.size(); }
 	void Set_Gravity(pvec2 gravity_vector) { gravity = gravity_vector; }
-	u32 Get_ContactPoints_Count() { return Contactpoints.size(); }
-	pvec2 Get_ContactPoint(u32 index) { return Contactpoints[index]; }
 
 	void update(f32 deltaTime, u32 iterations = 1)
 	{
@@ -1018,77 +1038,13 @@ public:
 
 		while (iterations > 0)
 		{
-			// clear Manifolds vector
-			Manifolds.clear();
-			// clear ContactPoints vector
-			// TODO:: Remove
-			Contactpoints.clear();
+			// clear ContactPairs vector
+			ContactPairs.clear();
 
+			StepBodies(deltaTime);
+			BroadPhase(iterations);
+			NarrowPhase();
 
-			for (size_t i = 0; i < Bodies.size(); i++)
-			{
-				PhysicsBody* Body = Get_Body(i);
-
-				// Skip if is static
-				if (Body->isStatic)
-					continue;
-
-				//pvec2 acceleration = Body->force * Body->invMass;
-				//Body->linearVelocity += acceleration * deltaTime;
-				Body->linearVelocity += gravity * deltaTime;
-				Body->move(Body->linearVelocity * deltaTime);
-
-				Body->rotate(Body->rotationalVelocity * deltaTime);
-
-				//Body->linearVelocity *= drag;
-				//Body->force = pvec2(0.0f);
-			}
-
-			for (size_t a = 0; a < Bodies.size(); a++)
-			{
-				PhysicsBody* BodyA = Get_Body(a);
-				for (size_t b = a + 1; b < Bodies.size(); b++)
-				{
-					PhysicsBody* BodyB = Get_Body(b);
-
-					if (BodyA->isStatic && BodyB->isStatic)
-						continue;
-
-					pvec2 collision_normal;
-					f32 collision_depth;
-					if (isCollided(BodyA, BodyB, collision_normal, collision_depth))
-					{
-						// rseolve collision
-						if (BodyA->isStatic)
-							BodyB->move(collision_normal * collision_depth);
-						else if (BodyB->isStatic)
-							BodyA->move(collision_normal * -collision_depth);
-						else
-						{
-							BodyA->move(collision_normal * collision_depth * -0.5f);
-							BodyB->move(collision_normal * collision_depth *  0.5f);
-						}
-
-						// store collision manifold information
-						std::shared_ptr<CollisionManifold> manifold = std::make_shared<CollisionManifold>();
-						manifold->BodyA = BodyA;
-						manifold->BodyB = BodyB;
-						manifold->collision_normal = collision_normal;
-						manifold->collision_depth = collision_depth;
-						// TODO:: add contact points
-						Calculate_ContactPoints(manifold.get());
-						Manifolds.push_back(manifold);
-					}
-				} // b
-			} // a
-
-			// resolve collision
-			for (size_t c = 0; c < Manifolds.size(); c++)
-			{
-				CollisionManifold* manifold = Manifolds[c].get();
-				// impulse resolution
-				impulse_resolution(manifold->BodyA, manifold->BodyB, manifold->collision_normal);
-			}
 			iterations--;
 		} // iterations
 	}
@@ -1096,27 +1052,111 @@ public:
 private:
 	std::vector<std::shared_ptr<PhysicsBody>> Bodies;
 	std::vector<std::shared_ptr<CollisionManifold>> Manifolds;
-	std::vector<pvec2> Contactpoints;
+	std::vector<std::shared_ptr<ContactPair>> ContactPairs;
 	pvec2 gravity;
 	f32 drag;
 
+
+	void StepBodies(f32 deltaTime)
+	{
+		for (size_t i = 0; i < Bodies.size(); i++)
+		{
+			PhysicsBody* Body = Get_Body(i);
+
+			// Skip if is static
+			if (Body->isStatic)
+				continue;
+
+			//pvec2 acceleration = Body->force * Body->invMass;
+			//Body->linearVelocity += acceleration * deltaTime;
+			Body->linearVelocity += gravity * deltaTime;
+			Body->move(Body->linearVelocity * deltaTime);
+
+			Body->rotate(Body->rotationalVelocity * deltaTime);
+
+			//Body->linearVelocity *= drag;
+			//Body->force = pvec2(0.0f);
+		}
+	}
+
+	void BroadPhase(u32 iterations)
+	{
+		for (size_t a = 0; a < Bodies.size() - 1; a++)
+		{
+			PhysicsBody* BodyA = Get_Body(a);
+			AABB BodyA_AABB = BodyA->getAABB();
+			for (size_t b = a + 1; b < Bodies.size(); b++)
+			{
+				PhysicsBody* BodyB = Get_Body(b);
+				AABB BodyB_AABB = BodyB->getAABB();
+
+				if (BodyA->isStatic && BodyB->isStatic)
+					continue;
+
+				pvec2 collision_normal;
+				f32 collision_depth;
+				if (!collisions::AABB_vs_AABB(BodyA_AABB, BodyB_AABB))
+					continue;
+
+				// AABBs are collided
+				// record BroadPhase collided pairs
+				ContactPairs.push_back(std::make_shared<ContactPair>(a, b));
+			} // b
+		} // a
+	}
+
+	void NarrowPhase()
+	{
+		//LOG_INFO("ContactPairs = {}", ContactPairs.size());
+		for (size_t i = 0; i < ContactPairs.size(); i++)
+		{
+			PhysicsBody* BodyA = Get_Body(ContactPairs[i]->BodyA_Index);
+			PhysicsBody* BodyB = Get_Body(ContactPairs[i]->BodyB_Index);
+			pvec2 collision_normal;
+			f32 collision_depth;
+
+			if (isCollided(BodyA, BodyB, collision_normal, collision_depth))
+			{
+				// initial collision rseolve (separate bodies)
+				Separate_Bodies(BodyA, BodyB, collision_normal * collision_depth);
+
+				// store collision manifold information
+				std::shared_ptr<CollisionManifold> manifold = std::make_shared<CollisionManifold>();
+				manifold->BodyA = BodyA;
+				manifold->BodyB = BodyB;
+				manifold->collision_normal = collision_normal;
+				manifold->collision_depth = collision_depth;
+				Calculate_ContactPoints(manifold.get());
+
+				// impulse resolution
+				impulse_resolution(manifold->BodyA, manifold->BodyB, manifold->collision_normal);
+			}
+		}
+	}
+
+
+
+	void Separate_Bodies(PhysicsBody* BodyA, PhysicsBody* BodyB, const pvec2& penteration_vector)
+	{
+		if (BodyA->isStatic)
+			BodyB->move(penteration_vector);
+		else if (BodyB->isStatic)
+			BodyA->move(penteration_vector * -1.0f);
+		else
+		{
+			BodyA->move(penteration_vector * -0.5f);
+			BodyB->move(penteration_vector *  0.5f);
+		}
+	}
+
 	bool isCollided(PhysicsBody* BodyA, PhysicsBody* BodyB, pvec2& collison_normal, f32& collision_depth)
 	{
-		// check AABBs intersection firstly
-		if (collisions::AABB_vs_AABB(BodyA->getAABB(), BodyB->getAABB(), collison_normal, collision_depth))
-		{
-			if (BodyA->shape == BodyShape::AABB && BodyB->shape == BodyShape::AABB)
-				return true;
-		}
-		else
-			return false;
-
 		bool is_collided = false;
 
 		if (BodyA->shape == BodyShape::AABB)
 		{
 			if (BodyB->shape == BodyShape::AABB)
-				is_collided = collisions::AABB_vs_AABB(BodyA->getAABB(), BodyB->getAABB(), collison_normal, collision_depth);
+				collisions::AABB_vs_AABB(BodyA->getAABB(), BodyB->getAABB(), collison_normal, collision_depth);
 			if (BodyB->shape == BodyShape::BOX)
 				is_collided = collisions::AABB_vs_Polygon(BodyA->getAABB(), BodyB->position, &BodyB->getTransformedVertices()[0], 4, collison_normal, collision_depth);
 			if (BodyB->shape == BodyShape::CIRCLE)
@@ -1185,9 +1225,6 @@ private:
 				manifold->ContactPoint1 = ContactPoint;
 				manifold->ContactPoint2 = pvec2(0.0f);
 				manifold->ContactPointCount = 1;
-
-				// TODO:: Remove
-				Contactpoints.push_back(ContactPoint);
 			}
 			else if (manifold->BodyB->shape == BodyShape::BOX)
 			{
@@ -1196,9 +1233,6 @@ private:
 				manifold->ContactPoint1 = ContactPoint;
 				manifold->ContactPoint2 = pvec2(0.0f);
 				manifold->ContactPointCount = 1;
-
-				// TODO:: Remove
-				Contactpoints.push_back(ContactPoint);
 			}
 			else if (manifold->BodyB->shape == BodyShape::AABB)
 			{
@@ -1217,9 +1251,6 @@ private:
 				manifold->ContactPoint1 = ContactPoint;
 				manifold->ContactPoint2 = pvec2(0.0f);
 				manifold->ContactPointCount = 1;
-
-				// TODO:: Remove
-				Contactpoints.push_back(ContactPoint);
 			}// AABB
 		}// Circle
 		else if (manifold->BodyA->shape == BodyShape::BOX)
@@ -1231,9 +1262,6 @@ private:
 				manifold->ContactPoint1 = ContactPoint;
 				manifold->ContactPoint2 = pvec2(0.0f);
 				manifold->ContactPointCount = 1;
-
-				// TODO:: Remove
-				Contactpoints.push_back(ContactPoint);
 			}
 			else if (manifold->BodyB->shape == BodyShape::BOX)
 			{
@@ -1244,15 +1272,6 @@ private:
 				manifold->ContactPoint1 = ContactPoint1;
 				manifold->ContactPoint2 = ContactPoint2;
 				manifold->ContactPointCount = ContactPointCount;
-
-				// TODO:: Remove
-				if(ContactPointCount == 1)
-					Contactpoints.push_back(ContactPoint1);
-				else if (ContactPointCount > 1)
-				{
-					Contactpoints.push_back(ContactPoint1);
-					Contactpoints.push_back(ContactPoint2);
-				}
 			}
 			else if (manifold->BodyB->shape == BodyShape::AABB)
 			{
@@ -1274,15 +1293,6 @@ private:
 				manifold->ContactPoint1 = ContactPoint1;
 				manifold->ContactPoint2 = ContactPoint2;
 				manifold->ContactPointCount = ContactPointCount;
-
-				// TODO:: Remove
-				if (ContactPointCount == 1)
-					Contactpoints.push_back(ContactPoint1);
-				else if (ContactPointCount > 1)
-				{
-					Contactpoints.push_back(ContactPoint1);
-					Contactpoints.push_back(ContactPoint2);
-				}
 			} // AABB
 		} // BOX
 		else if (manifold->BodyA->shape == BodyShape::AABB)
@@ -1305,9 +1315,6 @@ private:
 				manifold->ContactPoint1 = ContactPoint;
 				manifold->ContactPoint2 = pvec2(0.0f);
 				manifold->ContactPointCount = 1;
-
-				// TODO:: Remove
-				Contactpoints.push_back(ContactPoint);
 			}// Circle
 			else if (manifold->BodyB->shape == BodyShape::BOX)
 			{
@@ -1329,15 +1336,6 @@ private:
 				manifold->ContactPoint1 = ContactPoint1;
 				manifold->ContactPoint2 = ContactPoint2;
 				manifold->ContactPointCount = ContactPointCount;
-
-				// TODO:: Remove
-				if (ContactPointCount == 1)
-					Contactpoints.push_back(ContactPoint1);
-				else if (ContactPointCount > 1)
-				{
-					Contactpoints.push_back(ContactPoint1);
-					Contactpoints.push_back(ContactPoint2);
-				}
 			}// BOX
 			else if (manifold->BodyB->shape == BodyShape::AABB)
 			{
@@ -1368,15 +1366,6 @@ private:
 				manifold->ContactPoint1 = ContactPoint1;
 				manifold->ContactPoint2 = ContactPoint2;
 				manifold->ContactPointCount = ContactPointCount;
-
-				// TODO:: Remove
-				if (ContactPointCount == 1)
-					Contactpoints.push_back(ContactPoint1);
-				else if (ContactPointCount > 1)
-				{
-					Contactpoints.push_back(ContactPoint1);
-					Contactpoints.push_back(ContactPoint2);
-				}
 			} // AABB
 		} // AABB
 	}
